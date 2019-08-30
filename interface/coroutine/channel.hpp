@@ -1,12 +1,10 @@
-﻿// ---------------------------------------------------------------------------
-//
+﻿//
 //  Author  : github.com/luncliff (luncliff@gmail.com)
 //  License : CC BY 4.0
 //  Note
 //      Coroutine based channel
 //      This is a simplified form of channel in The Go Language
 //
-// ---------------------------------------------------------------------------
 #pragma once
 #ifndef LUNCLIFF_COROUTINE_CHANNEL_HPP
 #define LUNCLIFF_COROUTINE_CHANNEL_HPP
@@ -42,15 +40,10 @@ struct bypass_lock final {
 
 namespace internal {
 
-// A non-null address that leads access violation
-static inline void* poison() noexcept(false) {
-    return reinterpret_cast<void*>(0xFADE'038C'BCFA'9E64);
-}
-
 // Linked list without allocation
-template <typename T>
+template <typename HasNextPtr>
 class list {
-    using node_type = T;
+    using node_type = HasNextPtr;
 
     node_type* head{};
     node_type* tail{};
@@ -87,32 +80,28 @@ template <typename T, typename M>
 class reader;
 template <typename T, typename M>
 class writer;
-template <typename T, typename M>
-class peeker;
 
 // Awaitable for channel's read operation
 template <typename T, typename M>
-class reader {
+class reader final {
   public:
     using value_type = T;
-    using pointer = T*;
-    using reference = T&;
-    using channel_type = channel<T, M>;
+    using pointer = value_type*;
+    using reference = value_type&;
+    using channel_type = channel<value_type, M>;
 
   private:
     using reader_list = typename channel_type::reader_list;
     using writer = typename channel_type::writer;
     using writer_list = typename channel_type::writer_list;
-    using peeker = typename channel_type::peeker;
 
     friend channel_type;
     friend writer;
-    friend peeker;
     friend reader_list;
 
-  protected:
-    mutable pointer ptr; // Address of value
-    mutable void* frame; // Resumeable Handle
+  private:
+    mutable pointer ptr;                  // address of the object
+    mutable coroutine_handle<void> frame; // reader/writer coroutine's frame
     union {
         reader* next = nullptr; // Next reader in channel
         channel_type* chan;     // Channel to push this reader
@@ -131,43 +120,64 @@ class reader {
     ~reader() noexcept = default;
 
   public:
-    bool await_ready() const noexcept(false) {
+    void unlock_anyway() const noexcept(false) {
+        chan->mtx.unlock();
+    }
+
+  private:
+    auto match_after_lock() const noexcept(false) -> writer* {
         chan->mtx.lock();
         if (chan->writer_list::is_empty())
             // await_suspend will unlock in the case
-            return false;
+            return nullptr;
+        return chan->writer_list::pop();
+    }
 
-        writer* w = chan->writer_list::pop();
+    void exchange_then_unlock(writer* w) const noexcept(false) {
         // exchange address & resumeable_handle
         swap(this->ptr, w->ptr);
         swap(this->frame, w->frame);
+        return unlock_anyway();
+    }
 
-        chan->mtx.unlock();
+    void push_then_unlock(channel_type& ch,
+                          coroutine_handle<void> coro) noexcept(false) {
+        this->frame = coro;         // remember the handle before push
+        this->next = nullptr;       // clear to prevent confusing
+        ch.reader_list::push(this); // push to the channel
+        return unlock_anyway();
+    }
+
+    bool try_fetch_and_resume(reference storage) noexcept(false) {
+        // frame holds poision if the channel is going to be destroyed
+        if (this->frame == noop_coroutine())
+            return false;
+        // Store first. we have to do this because the resume operation
+        // can destroy the writer coroutine
+        storage = move(*this->ptr);
+        if (this->frame)
+            this->frame.resume();
         return true;
     }
+
+  public:
+    bool await_ready() const noexcept(false) {
+        if (writer* w = match_after_lock()) {
+            exchange_then_unlock(w);
+            return true;
+        }
+        return false;
+    }
+
     void await_suspend(coroutine_handle<void> coro) noexcept(false) {
         // notice that next & chan are sharing memory
         channel_type& ch = *(this->chan);
-
-        this->frame = coro.address(); // remember handle before push/unlock
-        this->next = nullptr;         // clear to prevent confusing
-
-        ch.reader_list::push(this); // push to channel
-        ch.mtx.unlock();
+        return push_then_unlock(ch, coro);
     }
+
     auto await_resume() noexcept(false) -> tuple<value_type, bool> {
         auto t = make_tuple(value_type{}, false);
-        // frame holds poision if the channel is going to be destroyed
-        if (this->frame == internal::poison())
-            return t;
-
-        // Store first. we have to do this because the resume operation
-        // can destroy the writer coroutine
-        get<0>(t) = move(*ptr);
-        if (auto coro = coroutine_handle<void>::from_address(frame))
-            coro.resume();
-
-        get<1>(t) = true;
+        get<1>(t) = try_fetch_and_resume(get<0>(t));
         return t;
     }
 };
@@ -178,23 +188,20 @@ class writer final {
   public:
     using value_type = T;
     using pointer = T*;
-    using reference = T&;
     using channel_type = channel<T, M>;
 
   private:
     using reader = typename channel_type::reader;
     using reader_list = typename channel_type::reader_list;
     using writer_list = typename channel_type::writer_list;
-    using peeker = typename channel_type::peeker;
 
     friend channel_type;
     friend reader;
-    friend peeker;
     friend writer_list;
 
   private:
-    mutable pointer ptr; // Address of value
-    mutable void* frame; // Resumeable Handle
+    mutable pointer ptr;                  // address of the object
+    mutable coroutine_handle<void> frame; // reader/writer coroutine's frame
     union {
         writer* next = nullptr; // Next writer in channel
         channel_type* chan;     // Channel to push this writer
@@ -212,40 +219,60 @@ class writer final {
   public:
     ~writer() noexcept = default;
 
-  public:
-    bool await_ready() const noexcept(false) {
+  private:
+    void unlock_anyway() const noexcept(false) {
+        chan->mtx.unlock();
+    }
+
+    auto match_after_lock() const noexcept(false) -> reader* {
         chan->mtx.lock();
         if (chan->reader_list::is_empty())
             // await_suspend will unlock in the case
-            return false;
+            return nullptr;
+        return chan->reader_list::pop();
+    }
 
-        reader* r = chan->reader_list::pop();
+    void exchange_then_unlock(reader* r) const noexcept(false) {
         // exchange address & resumeable_handle
         swap(this->ptr, r->ptr);
         swap(this->frame, r->frame);
+        return unlock_anyway();
+    }
 
-        chan->mtx.unlock();
+    void push_then_unlock(channel_type& ch,
+                          coroutine_handle<void> coro) noexcept(false) {
+        this->frame = coro;         // remember the handle before push
+        this->next = nullptr;       // clear to prevent confusing
+        ch.writer_list::push(this); // push to the channel
+        return unlock_anyway();
+    }
+
+    bool try_resume() noexcept(false) {
+        // frame holds poision if the channel is going to be destroyed
+        if (this->frame == noop_coroutine())
+            return false;
+        if (this->frame)
+            this->frame.resume();
         return true;
     }
+
+  public:
+    bool await_ready() const noexcept(false) {
+        if (reader* r = match_after_lock()) {
+            exchange_then_unlock(r);
+            return true;
+        }
+        return false;
+    }
+
     void await_suspend(coroutine_handle<void> coro) noexcept(false) {
         // notice that next & chan are sharing memory
         channel_type& ch = *(this->chan);
-
-        this->frame = coro.address(); // remember handle before push/unlock
-        this->next = nullptr;         // clear to prevent confusing
-
-        ch.writer_list::push(this); // push to channel
-        ch.mtx.unlock();
+        push_then_unlock(ch, coro);
     }
+
     bool await_resume() noexcept(false) {
-        // frame holds poision if the channel is going to destroy
-        if (this->frame == internal::poison())
-            return false;
-
-        if (auto coro = coroutine_handle<void>::from_address(frame))
-            coro.resume();
-
-        return true;
+        return try_resume();
     }
 };
 
@@ -262,16 +289,16 @@ class channel final : internal::list<reader<T, M>>,
     using reference = value_type&;
     using mutex_type = M;
 
-  private:
+  public:
     using reader = reader<value_type, mutex_type>;
-    using reader_list = internal::list<reader>;
     using writer = writer<value_type, mutex_type>;
+
+  private:
+    using reader_list = internal::list<reader>;
     using writer_list = internal::list<writer>;
-    using peeker = peeker<value_type, mutex_type>;
 
     friend reader;
     friend writer;
-    friend peeker;
 
   private:
     mutex_type mtx{};
@@ -286,8 +313,7 @@ class channel final : internal::list<reader<T, M>>,
     channel() noexcept(false) : reader_list{}, writer_list{}, mtx{} {
         // initialized 2 linked list and given mutex
     }
-    ~channel() noexcept(false) // channel can't provide exception guarantee...
-    {
+    ~channel() noexcept(false) {
         writer_list& writers = *this;
         reader_list& readers = *this;
         //
@@ -305,18 +331,17 @@ class channel final : internal::list<reader<T, M>>,
         size_t repeat = 1; // author experienced 5'000+ for hazard usage
         while (repeat--) {
             unique_lock lck{mtx};
-
             while (writers.is_empty() == false) {
                 writer* w = writers.pop();
-                auto coro = coroutine_handle<void>::from_address(w->frame);
-                w->frame = internal::poison();
+                auto coro = w->frame;
+                w->frame = noop_coroutine();
 
                 coro.resume();
             }
             while (readers.is_empty() == false) {
                 reader* r = readers.pop();
-                auto coro = coroutine_handle<void>::from_address(r->frame);
-                r->frame = internal::poison();
+                auto coro = r->frame;
+                r->frame = noop_coroutine();
 
                 coro.resume();
             }
@@ -332,58 +357,20 @@ class channel final : internal::list<reader<T, M>>,
     }
 };
 
-// Extension of channel reader for subroutines
-template <typename T, typename M>
-class peeker final : protected reader<T, M> {
-    using value_type = T;
-    using channel_type = channel<T, M>;
-    using reader = typename channel_type::reader;
-    using writer = typename channel_type::writer;
-
-  private:
-    peeker(const peeker&) noexcept(false) = delete;
-    peeker(peeker&&) noexcept(false) = delete;
-    peeker& operator=(const peeker&) noexcept(false) = delete;
-    peeker& operator=(peeker&&) noexcept(false) = delete;
-
-  public:
-    explicit peeker(channel_type& ch) noexcept(false) : reader{ch} {
-    }
-    ~peeker() noexcept = default;
-
-  public:
-    void peek() const noexcept(false) {
-        // since there is no suspension, use scoped locking
-        unique_lock lck{this->chan->mtx};
-        if (this->chan->writer_list::is_empty() == false) {
-            writer* w = this->chan->writer_list::pop();
-            swap(this->ptr, w->ptr);
-            swap(this->frame, w->frame);
-        }
-    }
-    bool acquire(value_type& storage) noexcept(false) {
-        // if there was a writer, take its value
-        if (this->ptr == nullptr)
-            return false;
-        storage = move(*this->ptr);
-
-        // resume writer coroutine
-        if (auto coro = coroutine_handle<void>::from_address(this->frame))
-            coro.resume();
-        return true;
-    }
-};
-
 //  If the channel is readable, acquire the value and the function.
 template <typename T, typename M, typename Fn>
 void select(channel<T, M>& ch, Fn&& fn) noexcept(false) {
-    static_assert(sizeof(reader<T, M>) == sizeof(peeker<T, M>));
+    using channel_t = channel<T, M>;
+    using reader_t = typename channel_t::reader;
 
-    peeker<T, M> p{ch};     // peeker will move element
-    T storage{};            //    into the call stack
-    p.peek();               // the channel has waiting writer?
-    if (p.acquire(storage)) // acquire + resume writer
-        fn(storage);        // invoke the function
+    reader_t r = ch.read();
+    if (r.await_ready()) { // if false, it's locked. we must ensure unlock
+        auto tup = r.await_resume(); // move the value to current stack
+        if (bool acquired = get<1>(tup); acquired)
+            fn(get<0>(tup));
+        return;
+    }
+    return r.unlock_anyway(); // work just like scoped locking
 }
 
 //  Invoke `select` for each pairs (channel + function)
