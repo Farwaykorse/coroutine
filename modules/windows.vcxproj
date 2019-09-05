@@ -127,7 +127,7 @@
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;WIN32;_DEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>USE_PORTABLE_COROUTINE_HANDLE;WIN32_LEAN_AND_MEAN;NOMINMAX;WIN32;_DEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalOptions>/await %(AdditionalOptions)</AdditionalOptions>
       <AdditionalIncludeDirectories>$(ProjectDir)..\interface;$(ProjectDir);$(ProjectDir)..\external\guideline\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -164,7 +164,7 @@
       <WarningLevel>Level4</WarningLevel>
       <Optimization>Disabled</Optimization>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;_DEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>USE_PORTABLE_COROUTINE_HANDLE;WIN32_LEAN_AND_MEAN;NOMINMAX;_DEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalOptions>/await %(AdditionalOptions)</AdditionalOptions>
       <AdditionalIncludeDirectories>$(ProjectDir)..\interface;$(ProjectDir);$(ProjectDir)..\external\guideline\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -204,7 +204,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;WIN32;NDEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>USE_PORTABLE_COROUTINE_HANDLE;WIN32_LEAN_AND_MEAN;NOMINMAX;WIN32;NDEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalOptions>/await %(AdditionalOptions)</AdditionalOptions>
       <AdditionalIncludeDirectories>$(ProjectDir)..\interface;$(ProjectDir);$(ProjectDir)..\external\guideline\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
@@ -244,7 +244,7 @@
       <FunctionLevelLinking>true</FunctionLevelLinking>
       <IntrinsicFunctions>true</IntrinsicFunctions>
       <SDLCheck>true</SDLCheck>
-      <PreprocessorDefinitions>WIN32_LEAN_AND_MEAN;NOMINMAX;NDEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PreprocessorDefinitions>USE_PORTABLE_COROUTINE_HANDLE;WIN32_LEAN_AND_MEAN;NOMINMAX;NDEBUG;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
       <AdditionalOptions>/await %(AdditionalOptions)</AdditionalOptions>
       <AdditionalIncludeDirectories>$(ProjectDir)..\interface;$(ProjectDir);$(ProjectDir)..\external\guideline\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>

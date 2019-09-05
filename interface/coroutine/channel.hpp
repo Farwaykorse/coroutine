@@ -145,7 +145,7 @@ class reader final {
         this->frame = coro;         // remember the handle before push
         this->next = nullptr;       // clear to prevent confusing
         ch.reader_list::push(this); // push to the channel
-        return unlock_anyway();
+        return ch.mtx.unlock();
     }
 
     bool try_fetch_and_resume(reference storage) noexcept(false) {
@@ -244,7 +244,7 @@ class writer final {
         this->frame = coro;         // remember the handle before push
         this->next = nullptr;       // clear to prevent confusing
         ch.writer_list::push(this); // push to the channel
-        return unlock_anyway();
+        return ch.mtx.unlock();
     }
 
     bool try_resume() noexcept(false) {

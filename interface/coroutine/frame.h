@@ -346,10 +346,15 @@ inline bool operator>=(const coroutine_handle<void> lhs,
 }
 
 struct noop_coroutine_promise {};
-using noop_coroutine_handle = coroutine_handle<noop_coroutine_promise>;
 
 template <>
 class coroutine_handle<noop_coroutine_promise> : public coroutine_handle<void> {
+  public:
+    coroutine_handle() noexcept {
+        auto& p = promise();
+        this->prefix.v = &p;
+    };
+
   public:
     constexpr explicit operator bool() const noexcept {
         return true;
@@ -373,13 +378,13 @@ class coroutine_handle<noop_coroutine_promise> : public coroutine_handle<void> {
         return p;
     }
     constexpr void* address() const noexcept {
-        auto& p = this->promise();
-        return &p;
+        return this->prefix.v;
     }
 };
+using noop_coroutine_handle = coroutine_handle<noop_coroutine_promise>;
 
 inline noop_coroutine_handle noop_coroutine() noexcept {
-    return {};
+    return noop_coroutine_handle{};
 }
 
 class suspend_never {

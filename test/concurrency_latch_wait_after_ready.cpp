@@ -2,8 +2,9 @@
 //  Author  : github.com/luncliff (luncliff@gmail.com)
 //  License : CC BY 4.0
 //
-#include <concurrency_helper.h>
 #include <coroutine/return.h>
+
+#include <concurrency_helper.h>
 
 #include "test.h"
 using namespace std;
