@@ -31,6 +31,8 @@ auto accept_until_error(int64_t ln, //
 
         socket_set_option_nonblock(cs); // set some options
         socket_set_option_nodelay(cs);
+        socket_set_option_timout(cs, 1000);
+
         service(cs); // attach(spawn) a service coroutine
     }
 }
@@ -129,8 +131,9 @@ auto net_echo_tcp_test() {
 
     for (auto& sd : conns) {
         sd = socket_create(hint);
-
         socket_set_option_nonblock(sd); // non-blocking connect
+        socket_set_option_timout(sd, 900);
+
         if (auto ec = socket_connect(sd, local))
             // Allow non-block error
             if (is_in_progress(ec) == false) {

@@ -112,6 +112,24 @@ void socket_set_option_nodelay(int64_t sd) {
     return socket_set_option(sd, IPPROTO_TCP, TCP_NODELAY, true);
 }
 
+void socket_set_option_timout(int64_t sd, uint32_t ms) {
+    constexpr auto unit = 1000;
+    timeval timeout{};
+    timeout.tv_sec = ms / unit;
+    timeout.tv_usec = (ms % unit) * unit;
+
+    if (::setsockopt(sd, SOL_SOCKET, SO_SNDTIMEO, //
+                     (char*)&timeout, sizeof(timeval)) != 0) {
+        auto ec = recent_net_error();
+        FAIL_WITH_CODE(ec);
+    }
+    if (::setsockopt(sd, SOL_SOCKET, SO_RCVTIMEO, //
+                     (char*)&timeout, sizeof(timeval)) != 0) {
+        auto ec = recent_net_error();
+        FAIL_WITH_CODE(ec);
+    }
+}
+
 #if defined(_MSC_VER)
 
 WSADATA wsa_data{};

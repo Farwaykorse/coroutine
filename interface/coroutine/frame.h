@@ -369,11 +369,12 @@ class coroutine_handle<noop_coroutine_promise> : public coroutine_handle<void> {
     }
 
     noop_coroutine_promise& promise() const noexcept {
-        auto* ptr = reinterpret_cast<noop_coroutine_promise*>(this->address());
-        return *ptr;
+        static noop_coroutine_promise p{};
+        return p;
     }
     constexpr void* address() const noexcept {
-        return (void*)0xFADE'038C'BCFA'9E64;
+        auto& p = this->promise();
+        return &p;
     }
 };
 
